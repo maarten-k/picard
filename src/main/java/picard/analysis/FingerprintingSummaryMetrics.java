@@ -37,6 +37,9 @@ public class FingerprintingSummaryMetrics extends MetricBase {
     /** The read group from which sequence data was drawn for comparison. */
     public String READ_GROUP;
 
+    /** The sample from whose sequence data/vcf was drawn for comparison */
+    public String OBSERVED_SAMPLE_ALIAS;
+
     /** The sample whose known genotypes the sequence data was compared to. */
     public String SAMPLE;
 
