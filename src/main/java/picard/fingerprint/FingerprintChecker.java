@@ -526,7 +526,7 @@ public class FingerprintChecker {
                 final Fingerprint combinedFp = new Fingerprint(specificSample, f, null);
                 fingerprintsByReadGroup.values().forEach(combinedFp::merge);
 
-                final FingerprintResults results = new FingerprintResults(f, specificSample, specificSample);
+                final FingerprintResults results = new FingerprintResults(f, null, specificSample);
                 for (final Fingerprint expectedFp : expectedFingerprints) {
                     final MatchResults result = calculateMatchResults(combinedFp, expectedFp, 0, pLossofHet);
                     results.addResults(result);

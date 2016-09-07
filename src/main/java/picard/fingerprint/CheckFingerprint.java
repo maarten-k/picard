@@ -75,8 +75,13 @@ public class CheckFingerprint extends CommandLineProgram {
             "files, with the summary metrics having a file extension '" + CheckFingerprint.FINGERPRINT_SUMMARY_FILE_SUFFIX + "' " +
             "and the detail metrics having a file extension '" + CheckFingerprint.FINGERPRINT_DETAIL_FILE_SUFFIX + "'.";
 
-    @Option(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc = "Input file SAM/BAM or VCF.  (Single Sample)")
+    @Option(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc = "Input file SAM/BAM or VCF.  If a VCF is used, " +
+            "it must have at least one sample.  If there are more than one samples in the VCF, the parameter OBSERVED_SAMPLE_ALIAS must " +
+            "be provided in order to indicate which sample's data to use.  If there are no samples in the VCF, an exception will be thrown.")
     public File INPUT;
+
+    @Option(optional = true, doc = "If the input is a VCF, this parameters used to select which sample's data in the VCF to use.")
+    public String OBSERVED_SAMPLE_ALIAS;
 
     @Option(shortName=StandardOptionDefinitions.OUTPUT_SHORT_NAME, doc = "The base prefix of output files to write.  The summary metrics " +
             "will have the file extension '" + CheckFingerprint.FINGERPRINT_SUMMARY_FILE_SUFFIX + "' and the detail metrics will have " +
@@ -93,7 +98,7 @@ public class CheckFingerprint extends CommandLineProgram {
             "any number of genotypes; CheckFingerprint will use only those that are usable for fingerprinting.")
     public File GENOTYPES;
 
-    @Option(optional=true, doc = "This parameter can be used to specify which sample's genotypes to use from the " +
+    @Option(shortName = "SAMPLE_ALIAS", optional=true, doc = "This parameter can be used to specify which sample's genotypes to use from the " +
             "expected VCF file (the GENOTYPES file).  If it is not supplied, the sample name from the input " +
             "(VCF or BAM read group header) will be used.")
     public String EXPECTED_SAMPLE_ALIAS;
@@ -134,6 +139,7 @@ public class CheckFingerprint extends CommandLineProgram {
             outputSummaryMetricsFile = new File(OUTPUT + FINGERPRINT_SUMMARY_FILE_SUFFIX);
         }
 
+        IOUtil.assertFileIsReadable(INPUT);
         IOUtil.assertFileIsReadable(HAPLOTYPE_MAP);
         IOUtil.assertFileIsReadable(GENOTYPES);
         IOUtil.assertFileIsWritable(outputDetailMetricsFile);
@@ -176,9 +182,21 @@ public class CheckFingerprint extends CommandLineProgram {
             // Verify that there is only one sample in the VCF
             final VCFFileReader fileReader = new VCFFileReader(INPUT, false);
             final VCFHeader fileHeader = fileReader.getFileHeader();
-            if (fileHeader.getNGenotypeSamples() != 1) {
-                throw new PicardException("INPUT VCF file must not contain data from multiple samples.");
+            if (fileHeader.getNGenotypeSamples() < 1) {
+                throw new PicardException("INPUT VCF file must contain at least one sample.");
             }
+            if ((fileHeader.getNGenotypeSamples() > 1) && (OBSERVED_SAMPLE_ALIAS == null)) {
+                throw new PicardException("INPUT VCF file contains multiple samples and yet the OBSERVED_SAMPLE_ALIAS parameter is not set.");
+            }
+            // set observedSampleAlias to the parameter, if set.  Otherwise, if here, this must be a single sample VCF, get it's sample
+            observedSampleAlias = (OBSERVED_SAMPLE_ALIAS != null) ? OBSERVED_SAMPLE_ALIAS : fileHeader.getGenotypeSamples().get(0);
+
+            // Now verify that observedSampleAlias is, in fact, in the VCF
+            if (!fileHeader.getGenotypeSamples().contains(observedSampleAlias)) {
+                throw new PicardException("INPUT VCF file does not contain OBSERVED_SAMPLE_ALIAS: " + observedSampleAlias);
+            }
+
+            if (OBSERVED_SAMPLE_ALIAS == null)
             observedSampleAlias = fileHeader.getGenotypeSamples().get(0);
             fileReader.close();
 
@@ -264,8 +282,12 @@ public class CheckFingerprint extends CommandLineProgram {
     protected String[] customCommandLineValidation() {
         IOUtil.assertFileIsReadable(INPUT);
 
-        if (!isBamOrSamFile(INPUT) && IGNORE_READ_GROUPS) {
+        boolean isBamOrSamFile = isBamOrSamFile(INPUT);
+        if (!isBamOrSamFile && IGNORE_READ_GROUPS) {
             return new String[]{"The parameter IGNORE_READ_GROUPS can only be used with BAM/SAM inputs."};
+        }
+        if (isBamOrSamFile && OBSERVED_SAMPLE_ALIAS != null) {
+            return new String[]{"The parameter OBSERVED_SAMPLE_ALIAS can only be used with a VCF input."};
         }
         return super.customCommandLineValidation();
     }
